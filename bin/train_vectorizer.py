@@ -1,19 +1,19 @@
-import os
-import sys
-import random
 import argparse
-import chainer
-import chainer.serializers
+import os
+import random
+import sys
+
 import chainer.optimizers
-import numpy
 import matplotlib
+import numpy
+
 matplotlib.use('Agg')
 import pylab
 
 import cv2
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-import model
+from kawaii_creator import model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("model_file")
@@ -24,11 +24,12 @@ args = parser.parse_args()
 
 if args.gpu >= 0:
     chainer.cuda.check_cuda_available()
-    #chainer.Function.type_check_enable = False
+    # chainer.Function.type_check_enable = False
     chainer.cuda.get_device(args.gpu).use()
     xp = chainer.cuda.cupy
 else:
     xp = numpy
+
 
 def augment(original_img, max_margin=10):
     margin = random.randint(0, max_margin)
@@ -36,10 +37,11 @@ def augment(original_img, max_margin=10):
     left = random.randint(0, margin)
     top = random.randint(0, margin)
     cropped_img = original_img[
-        left:left+(original_width-2*margin),
-        top:top+(original_height-2*margin),
-    ]
+                  left:left + (original_width - 2 * margin),
+                  top:top + (original_height - 2 * margin),
+                  ]
     return cv2.resize(cropped_img, (original_width, original_height))
+
 
 generator = model.Generator()
 chainer.serializers.load_hdf5(args.model_file, generator)
@@ -83,13 +85,15 @@ for i in xrange(args.iter):
 
     if i % 10000 == 0:
         def clip_img(x):
-            return numpy.float32(-1 if x<-1 else (1 if x>1 else x))
+            return numpy.float32(-1 if x < -1 else (1 if x > 1 else x))
+
 
         def save(x, filepath):
-            img = ((numpy.vectorize(clip_img)(x[0,:,:,:])+1)/2).transpose(1,2,0)
+            img = ((numpy.vectorize(clip_img)(x[0, :, :, :]) + 1) / 2).transpose(1, 2, 0)
             pylab.imshow(img)
             pylab.axis('off')
             pylab.savefig(filepath)
+
 
         reconstructed = vectorizer(x)
         regenerated = generator(reconstructed, test=True)
@@ -100,4 +104,3 @@ for i in xrange(args.iter):
         else:
             save(x.data, os.path.join(args.out_dir, "constructed.png"))
             save(regenerated.data, os.path.join(args.out_dir, "reconstructed.png"))
-

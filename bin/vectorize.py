@@ -1,13 +1,14 @@
 import argparse
 import os
 import sys
+
 import chainer.optimizers
 import cv2
 import numpy
 import pylab
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-import model
+from kawaii_creator import model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("generator_model_file")

@@ -53,7 +53,7 @@ class Vectorizer(chainer.Chain):
 class FaceExtractor(object):
     def __init__(self, margin=0.3):
         self.classifier = cv2.CascadeClassifier(
-            os.path.join(os.path.dirname(__file__), "animeface", "lbpcascade_animeface.xml"))
+            os.path.join(os.path.dirname(__file__), "..", "animeface", "lbpcascade_animeface.xml"))
         self.margin = margin
 
     def extract(self, img_file):

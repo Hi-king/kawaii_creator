@@ -1,18 +1,16 @@
 import argparse
 import os
 import sys
+
 import chainer
+import cv2
 import numpy as np
 import numpy
 import pylab
-import cv2
 from chainer import Variable
-from chainer import serializers
-
-
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-import model
+from kawaii_creator import model
 
 nz = 100
 
