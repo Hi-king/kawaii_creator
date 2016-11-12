@@ -1,0 +1,3 @@
+[submodule "animeface"]
+	path = animeface
+	url = https://github.com/nagadomi/lbpcascade_animeface.git
