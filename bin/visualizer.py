@@ -10,7 +10,7 @@ import pylab
 from chainer import Variable
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from kawaii_creator import model
+from kawaii_creator import models
 
 nz = 100
 
@@ -20,7 +20,7 @@ parser.add_argument("--out_file", default="output.png")
 args = parser.parse_args()
 xp = numpy
 
-generator = model.Generator()
+generator = models.Generator()
 chainer.serializers.load_hdf5(args.generator_model_file, generator)
 
 def clip_img(x):

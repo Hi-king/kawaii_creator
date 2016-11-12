@@ -13,7 +13,7 @@ import pylab
 import cv2
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from kawaii_creator import model
+from kawaii_creator import models
 
 parser = argparse.ArgumentParser()
 parser.add_argument("model_file")
@@ -43,13 +43,13 @@ def augment(original_img, max_margin=10):
     return cv2.resize(cropped_img, (original_width, original_height))
 
 
-generator = model.Generator()
+generator = models.Generator()
 chainer.serializers.load_hdf5(args.model_file, generator)
 
-extractor = model.FaceExtractor()
+extractor = models.FaceExtractor()
 
 optimizer = chainer.optimizers.Adam(alpha=0.001)
-vectorizer = model.Vectorizer()
+vectorizer = models.Vectorizer()
 if args.gpu >= 0:
     generator.to_gpu()
     vectorizer.to_gpu()

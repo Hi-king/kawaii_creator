@@ -8,7 +8,7 @@ import numpy
 import pylab
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from kawaii_creator import model
+from kawaii_creator import models
 
 parser = argparse.ArgumentParser()
 parser.add_argument("generator_model_file")
@@ -18,12 +18,12 @@ parser.add_argument("--out_dir", default=".")
 args = parser.parse_args()
 xp = numpy
 
-generator = model.Generator()
+generator = models.Generator()
 chainer.serializers.load_hdf5(args.generator_model_file, generator)
 
-extractor = model.FaceExtractor()
+extractor = models.FaceExtractor()
 
-vectorizer = model.Vectorizer()
+vectorizer = models.Vectorizer()
 chainer.serializers.load_hdf5(args.vectorizer_model_file, vectorizer)
 
 face_img = extractor.extract(args.target_img)
