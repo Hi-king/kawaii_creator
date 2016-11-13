@@ -7,7 +7,6 @@ import numpy
 import pylab
 import cv2
 from chainer import Variable
-from chainer import serializers
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import kawaii_creator
@@ -39,7 +38,6 @@ def save(x, filepath):
 xp = numpy
 pylab.rcParams['figure.figsize'] = (22.0, 22.0)
 pylab.clf()
-vissize = 100
 z = (xp.random.uniform(-1, 1, (100, 100)).astype(np.float32))
 z = Variable(z)
 x = generator(z, test=True)

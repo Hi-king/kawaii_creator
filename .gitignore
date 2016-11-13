@@ -1,6 +1,9 @@
 .idea
 *.png
 *.npz
+log.txt
+.DS_Store
+
 
 ### https://raw.github.com/github/gitignore/cc542de017c606138a87ee4880e5f06b3a306def/python.gitignore
 
