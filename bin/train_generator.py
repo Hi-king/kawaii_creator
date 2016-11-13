@@ -84,11 +84,13 @@ for batch in iterator | pipe.select(xp.array):
 
     count_processed += len(batch)
     report_span = batchsize * 10
+    save_span = batchsize * 100
     if count_processed % report_span == 0:
         print("processed: {}".format(count_processed))
         print("loss_discriminator: {}".format(sum_loss_discriminator / report_span))
         print("loss_generator: {}".format(sum_loss_generator / report_span))
         sum_loss_discriminator, sum_loss_generator = 0, 0
+    if count_processed % save_span == 0:
         chainer.serializers.save_npz(
             os.path.join(OUTPUT_DIRECTORY, "discriminator_model_{}.npz".format(count_processed)), discriminator)
         chainer.serializers.save_npz(
