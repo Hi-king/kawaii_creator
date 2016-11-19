@@ -38,8 +38,10 @@ else:
 batchsize = args.batchsize
 
 paths = glob.glob("{}/*".format(args.dataset))
-dataset = kawaii_creator.datasets.ResizedImageDataset(paths=paths, resize=(96, 96))
-iterator = chainer.iterators.SerialIterator(dataset, batch_size=batchsize, repeat=True, shuffle=True)
+dataset = kawaii_creator.datasets.PreprocessedDataset(
+    kawaii_creator.datasets.ResizedImageDataset(paths=paths, resize=(96, 96)))
+# iterator = chainer.iterators.SerialIterator(dataset, batch_size=batchsize, repeat=True, shuffle=True)
+iterator = chainer.iterators.MultiprocessIterator(dataset, batch_size=batchsize, repeat=True, shuffle=True)
 
 generator = kawaii_creator.models.Generator(GENERATOR_INPUT_DIMENTIONS)
 discriminator = kawaii_creator.models.Discriminator()
@@ -66,6 +68,14 @@ for batch in iterator | pipe.select(xp.array):
     # Discriminator Round
     discriminated_from_generated = discriminator(generated)
     discriminated_from_dataset = discriminator(variable_batch)
+    accuracy = (chainer.functions.accuracy(
+        discriminated_from_generated,
+        chainer.Variable(xp.ones(discriminated_from_generated.data.shape[0], dtype=xp.int32))
+    ) + chainer.functions.accuracy(
+        discriminated_from_dataset,
+        chainer.Variable(xp.zeros(discriminated_from_dataset.data.shape[0], dtype=xp.int32))
+    )) / 2
+    sum_accuracy += chainer.cuda.to_cpu(accuracy.data)
 
     # update generator
     optimizer_generator.zero_grads()
@@ -78,14 +88,6 @@ for batch in iterator | pipe.select(xp.array):
     optimizer_generator.update()
 
     # update discriminator
-    accuracy = (chainer.functions.accuracy(
-        discriminated_from_generated,
-        chainer.Variable(xp.ones(discriminated_from_generated.data.shape[0], dtype=xp.int32))
-    ) + chainer.functions.accuracy(
-        discriminated_from_dataset,
-        chainer.Variable(xp.zeros(discriminated_from_dataset.data.shape[0], dtype=xp.int32))
-    )) / 2
-    sum_accuracy += chainer.cuda.to_cpu(accuracy.data)
     if (not args.use_accuracy_threshold) or accuracy.data < 0.8:
         optimizer_discriminator.zero_grads()
         loss_discriminator = chainer.functions.softmax_cross_entropy(
@@ -100,8 +102,8 @@ for batch in iterator | pipe.select(xp.array):
         optimizer_discriminator.update()
 
     count_processed += len(batch)
-    report_span = batchsize * 10
-    save_span = batchsize * 100
+    report_span = batchsize * 100
+    save_span = batchsize * 1000
     if count_processed % report_span == 0:
         logging.info("processed: {}".format(count_processed))
         logging.info("accuracy_discriminator: {}".format(sum_accuracy * batchsize / report_span))

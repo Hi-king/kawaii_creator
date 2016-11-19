@@ -42,3 +42,17 @@ class ResizedImageDataset(dataset_mixin.DatasetMixin):
         if image_data.shape[0] == 4:  # RGBA
             image_data = image_data[:3]
         return image_data
+
+
+class PreprocessedDataset(dataset_mixin.DatasetMixin):
+    def __init__(self, base: dataset_mixin.DatasetMixin):
+        self.base = base
+
+    def __len__(self):
+        return len(self.base)
+
+    def get_example(self, i) -> numpy.ndarray:
+        raw = self.base[i]
+        if numpy.random.randint(2) == 0:
+            raw = raw[:, :, ::-1]
+        return (raw - 128.0) / 128.0

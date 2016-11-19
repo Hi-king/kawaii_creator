@@ -20,18 +20,29 @@ args = parser.parse_args()
 xp = numpy
 
 generator = kawaii_creator.models.Generator()
-chainer.serializers.load_npz(args.generator_model_file, generator)
+if os.path.splitext(args.generator_model_file)[1] == ".npz":
+    chainer.serializers.load_npz(args.generator_model_file, generator)
+elif os.path.splitext(args.generator_model_file)[1] == ".h5":
+    chainer.serializers.load_hdf5(args.generator_model_file, generator)
+else:
+    raise Exception()
 
 
 def clip_img(x):
     return numpy.float32(-1 if x < -1 else (1 if x > 1 else x))
 
 
-def save(x, filepath):
-    img = ((numpy.vectorize(clip_img)(x[0, :, :, :]) + 1) / 2).transpose(1, 2, 0)
+def save(x: numpy.ndarray, filepath, num=10):
+    def to_image(x: numpy.ndarray):
+        return cv2.cvtColor(
+            ((numpy.vectorize(clip_img)(x) + 1) / 2).transpose(1, 2, 0) * 256,
+            cv2.COLOR_RGB2BGR)
+
     cv2.imwrite(
         filepath,
-        cv2.cvtColor(img * 256, cv2.COLOR_RGB2BGR)
+        numpy.hstack(
+            [to_image(x[i]) for i in range(num)]
+        )
     )
 
 
@@ -42,10 +53,4 @@ z = (xp.random.uniform(-1, 1, (100, 100)).astype(np.float32))
 z = Variable(z)
 x = generator(z, test=True)
 x = x.data
-# for i_ in range(100):
-#     tmp = ((np.vectorize(clip_img)(x[i_,:,:,:])+1)/2).transpose(1,2,0)
-#     pylab.subplot(10,10,i_+1)
-#     pylab.imshow(tmp)
-#     pylab.axis('off')
-# pylab.savefig(args.out_file)
-save(x, args.out_file)
+save(x, args.out_file, num=10)

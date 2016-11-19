@@ -1,6 +1,7 @@
 .idea
 *.png
 *.npz
+*.h5
 log.txt
 .DS_Store
 
