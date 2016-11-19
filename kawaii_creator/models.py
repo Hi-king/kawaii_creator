@@ -111,12 +111,5 @@ class FaceExtractor(object):
             interpolation=cv2.INTER_AREA
         ), cv2.COLOR_BGR2RGB)
 
-        # import pylab
-        # pylab.imshow(cv2.cvtColor(
-        #     target_img[y-margin:y+height+margin, x-margin:x+width+margin],
-        #     cv2.COLOR_BGR2RGB
-        # ))
-        # pylab.show()
-
         float_img = rgb_img.astype(numpy.float32)
         return float_img / 256
