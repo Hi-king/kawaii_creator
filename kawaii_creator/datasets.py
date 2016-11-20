@@ -5,6 +5,8 @@ import numpy
 import six
 from PIL import Image
 from chainer.dataset import dataset_mixin
+import cv2
+import random
 
 
 class PILImageDataset(dataset_mixin.DatasetMixin):
@@ -50,6 +52,7 @@ class PreprocessedDataset(dataset_mixin.DatasetMixin):
 
     def __len__(self):
         return len(self.base)
+
 
     def get_example(self, i) -> numpy.ndarray:
         raw = self.base[i]
