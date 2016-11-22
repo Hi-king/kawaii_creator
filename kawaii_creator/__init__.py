@@ -2,3 +2,4 @@
 from . import datasets
 from . import models
 from . import updaters
+from . import utility

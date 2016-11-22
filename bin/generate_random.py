@@ -20,12 +20,7 @@ args = parser.parse_args()
 xp = numpy
 
 generator = kawaii_creator.models.Generator()
-if os.path.splitext(args.generator_model_file)[1] == ".npz":
-    chainer.serializers.load_npz(args.generator_model_file, generator)
-elif os.path.splitext(args.generator_model_file)[1] == ".h5":
-    chainer.serializers.load_hdf5(args.generator_model_file, generator)
-else:
-    raise Exception()
+kawaii_creator.utility.load_modelfile(args.generator_model_file, generator)
 
 
 def clip_img(x):

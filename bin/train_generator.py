@@ -28,14 +28,6 @@ def augment(original_img, max_margin=10):
     return cv2.resize(cropped_img, (original_width, original_height))
 
 
-GENERATOR_INPUT_DIMENTIONS = 100
-OUTPUT_DIRECTORY = os.path.join(os.path.dirname(__file__), "..", "output", str(time.time()))
-os.makedirs(OUTPUT_DIRECTORY)
-
-logging.basicConfig(filename=os.path.join(OUTPUT_DIRECTORY, "log.txt"), level=logging.DEBUG)
-console = logging.StreamHandler()
-logging.getLogger('').addHandler(console)
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", required=True)
 parser.add_argument("--gpu", type=int, default=-1)
@@ -43,7 +35,25 @@ parser.add_argument("--batchsize", type=int, default=10)
 parser.add_argument("--use_accuracy_threshold", action="store_true")
 parser.add_argument("--use_vectorizer", action="store_true")
 parser.add_argument("--vectorizer_training_dataset")
+parser.add_argument("--outprefix", default="")
 args = parser.parse_args()
+
+GENERATOR_INPUT_DIMENTIONS = 100
+outdirname = "{prefix}{batch}{accthresh}{vec}{vectrain}{time}".format(
+    prefix=args.outprefix,
+    batch="batch_{}_".format(args.batchsize),
+    accthresh="accthresh_" if args.use_accuracy_threshold else "",
+    vec="withvec_" if args.use_vectorizer else "",
+    vectrain="withvectrain_" if args.vectorizer_training_dataset is not None else "",
+    time=int(time.time())
+)
+OUTPUT_DIRECTORY = os.path.join(os.path.dirname(__file__), "..", "output", outdirname)
+os.makedirs(OUTPUT_DIRECTORY)
+
+logging.basicConfig(filename=os.path.join(OUTPUT_DIRECTORY, "log.txt"), level=logging.DEBUG)
+console = logging.StreamHandler()
+logging.getLogger('').addHandler(console)
+
 logging.info(args)
 
 if args.gpu >= 0:
@@ -85,7 +95,8 @@ if args.gpu >= 0:
 updater = kawaii_creator.updaters.Updater(
     generator=generator, discriminator=discriminator, xp=xp, batchsize=batchsize,
     generator_input_dimentions=GENERATOR_INPUT_DIMENTIONS)
-vectorizer_updater = kawaii_creator.updaters.VectorizerUpdater(vectorizer)
+if args.use_vectorizer:
+    vectorizer_updater = kawaii_creator.updaters.VectorizerUpdater(vectorizer)
 
 count_processed, sum_loss_discriminator, sum_loss_generator, sum_accuracy = 0, 0, 0, 0
 for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
