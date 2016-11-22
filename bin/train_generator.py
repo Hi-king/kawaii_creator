@@ -36,17 +36,21 @@ parser.add_argument("--use_accuracy_threshold", action="store_true")
 parser.add_argument("--use_vectorizer", action="store_true")
 parser.add_argument("--vectorizer_training_dataset")
 parser.add_argument("--outprefix", default="")
+parser.add_argument("--pretrained_generator")
+parser.add_argument("--pretrained_discriminator")
 args = parser.parse_args()
 
 GENERATOR_INPUT_DIMENTIONS = 100
-outdirname = "{prefix}{batch}{accthresh}{vec}{vectrain}{time}".format(
-    prefix=args.outprefix,
-    batch="batch_{}_".format(args.batchsize),
-    accthresh="accthresh_" if args.use_accuracy_threshold else "",
-    vec="withvec_" if args.use_vectorizer else "",
-    vectrain="withvectrain_" if args.vectorizer_training_dataset is not None else "",
-    time=int(time.time())
-)
+outdirname = "_".join([
+    args.outprefix,
+    "finetune" if args.pretrained_generator is not None else "",
+    "batch{}".format(args.batchsize),
+    "accthresh" if args.use_accuracy_threshold else "",
+    "withvec" if args.use_vectorizer else "",
+    "withvectrain" if args.vectorizer_training_dataset is not None else "",
+    str(int(time.time())),
+] | pipe.where(lambda x: len(x) > 0))
+
 OUTPUT_DIRECTORY = os.path.join(os.path.dirname(__file__), "..", "output", outdirname)
 os.makedirs(OUTPUT_DIRECTORY)
 
@@ -55,6 +59,10 @@ console = logging.StreamHandler()
 logging.getLogger('').addHandler(console)
 
 logging.info(args)
+if args.pretrained_generator is not None:
+    logging.info("pretrained_generator: {}".format(os.path.abspath(args.pretrained_generator)))
+if args.pretrained_discriminator is not None:
+    logging.info("pretrained_discriminator: {}".format(os.path.abspath(args.pretrained_discriminator)))
 
 if args.gpu >= 0:
     chainer.cuda.check_cuda_available()
@@ -81,7 +89,11 @@ if args.vectorizer_training_dataset is not None:
                                                                           shuffle=True)
 
 generator = kawaii_creator.models.Generator(GENERATOR_INPUT_DIMENTIONS)
+if args.pretrained_generator is not None:
+    kawaii_creator.utility.load_modelfile(args.pretrained_generator, generator)
 discriminator = kawaii_creator.models.Discriminator()
+if args.pretrained_discriminator is not None:
+    kawaii_creator.utility.load_modelfile(args.pretrained_discriminator, discriminator)
 if args.use_vectorizer:
     vectorizer = kawaii_creator.models.Vectorizer()
 else:
@@ -129,7 +141,8 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
     # finetune generator with vectorizer
     if args.vectorizer_training_dataset is not None:
         vectorizer_training_batch = chainer.Variable(xp.array(next(vectorizer_training_iterator)))
-        vectorized = vectorizer(vectorizer_training_batch)
+        vectorized = chainer.Variable(
+            xp.clip(vectorizer(vectorizer_training_batch).data, -1, 1))
         generated_from_vectorized = generator(vectorized)
         discriminated_from_vectorizer_training = updater.discriminator(chainer.Variable(generated_from_vectorized.data))
         updater.update_generator(discriminated_from_generated=discriminated_from_vectorizer_training)
