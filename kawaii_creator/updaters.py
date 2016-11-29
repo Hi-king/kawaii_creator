@@ -17,13 +17,13 @@ class Updater(object):
         self.optimizer_generator.add_hook(chainer.optimizer.WeightDecay(0.00001))
         self.optimizer_discriminator.add_hook(chainer.optimizer.WeightDecay(0.00001))
 
-    def generate_random(self, batchsize=None):
+    def generate_random(self, batchsize=None, test=False):
         if batchsize is None:
             batchsize = self.batchsize
         random_seed = chainer.Variable(
             self.xp.array(self.xp.random.uniform(-1, 1, (batchsize, self.generator_input_dimentions)),
                           dtype=self.xp.float32))
-        return self.generator(random_seed), random_seed
+        return self.generator(random_seed, test=test), random_seed
 
     def discriminator_accuracy(self, discriminated_from_generated, discriminated_from_dataset):
         return (chainer.functions.accuracy(

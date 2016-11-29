@@ -38,18 +38,20 @@ parser.add_argument("--vectorizer_training_dataset")
 parser.add_argument("--outprefix", default="")
 parser.add_argument("--pretrained_generator")
 parser.add_argument("--pretrained_discriminator")
+parser.add_argument('--disable_generator_training', action='store_false', dest='generator_training')
 args = parser.parse_args()
 
 GENERATOR_INPUT_DIMENTIONS = 100
 outdirname = "_".join([
-    args.outprefix,
-    "finetune" if args.pretrained_generator is not None else "",
-    "batch{}".format(args.batchsize),
-    "accthresh" if args.use_accuracy_threshold else "",
-    "withvec" if args.use_vectorizer else "",
-    "withvectrain" if args.vectorizer_training_dataset is not None else "",
-    str(int(time.time())),
-] | pipe.where(lambda x: len(x) > 0))
+                          args.outprefix,
+                          "finetune" if args.pretrained_generator is not None else "",
+                          "batch{}".format(args.batchsize),
+                          "accthresh" if args.use_accuracy_threshold else "",
+                          "withvec" if args.use_vectorizer else "",
+                          "disable_gen_train" if not args.generator_training else "",
+                          "withvectrain" if args.vectorizer_training_dataset is not None else "",
+                          str(int(time.time())),
+                      ] | pipe.where(lambda x: len(x) > 0))
 
 OUTPUT_DIRECTORY = os.path.join(os.path.dirname(__file__), "..", "output", outdirname)
 os.makedirs(OUTPUT_DIRECTORY)
@@ -113,30 +115,31 @@ if args.use_vectorizer:
 count_processed, sum_loss_discriminator, sum_loss_generator, sum_accuracy = 0, 0, 0, 0
 for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
 
-    # forward
-    generated, random_seed = updater.generate_random()
-    discriminated_from_generated = updater.discriminator(generated)
-    discriminated_from_dataset = updater.discriminator(batch)
-    accuracy = updater.discriminator_accuracy(discriminated_from_generated=discriminated_from_generated,
-                                              discriminated_from_dataset=discriminated_from_dataset)
-    sum_accuracy += chainer.cuda.to_cpu(accuracy.data)
+    if args.generator_training:
+        # forward
+        generated, random_seed = updater.generate_random()
+        discriminated_from_generated = updater.discriminator(generated)
+        discriminated_from_dataset = updater.discriminator(batch)
+        accuracy = updater.discriminator_accuracy(discriminated_from_generated=discriminated_from_generated,
+                                                  discriminated_from_dataset=discriminated_from_dataset)
+        sum_accuracy += chainer.cuda.to_cpu(accuracy.data)  # update generator
+        sum_loss_generator += updater.update_generator(discriminated_from_generated=discriminated_from_generated)
 
-    # update generator
-    sum_loss_generator += updater.update_generator(discriminated_from_generated=discriminated_from_generated)
-
-    # update discriminator
-    if (not args.use_accuracy_threshold) or accuracy.data < 0.8:
-        sum_loss_discriminator += updater.update_discriminator(
-            discriminated_from_generated=discriminated_from_generated,
-            discriminated_from_dataset=discriminated_from_dataset)
+        # update discriminator
+        if (not args.use_accuracy_threshold) or accuracy.data < 0.8:
+            sum_loss_discriminator += updater.update_discriminator(
+                discriminated_from_generated=discriminated_from_generated,
+                discriminated_from_dataset=discriminated_from_dataset)
 
     # update vectorizer
     if args.use_vectorizer:
-        generated, random_seed = updater.generate_random(batchsize=1)
+        generated, random_seed = updater.generate_random(batchsize=1, test=True)
         generated_augmented = chainer.Variable(
             xp.array([augment(chainer.cuda.to_cpu(generated.data[0]).transpose(1, 2, 0)).transpose(2, 0, 1)]))
         vectorized = vectorizer(generated_augmented)
+        vectorized = vectorizer(generated)
         vectorizer_updater.update_vectorizer(seed=random_seed, vectorized=vectorized)
+
 
     # finetune generator with vectorizer
     if args.vectorizer_training_dataset is not None:
@@ -147,9 +150,9 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
         discriminated_from_vectorizer_training = updater.discriminator(chainer.Variable(generated_from_vectorized.data))
         updater.update_generator(discriminated_from_generated=discriminated_from_vectorizer_training)
 
-    count_processed += len(batch.data)
     report_span = batchsize * 100
     save_span = batchsize * 10000
+    count_processed += len(batch.data)
     if count_processed % report_span == 0:
         logging.info("processed: {}".format(count_processed))
         logging.info("accuracy_discriminator: {}".format(sum_accuracy * batchsize / report_span))
