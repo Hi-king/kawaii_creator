@@ -7,6 +7,34 @@ from PIL import Image
 from chainer.dataset import dataset_mixin
 import cv2
 import random
+import pipe
+
+
+class AttributeLabelDataset(dataset_mixin.DatasetMixin):
+    def __init__(self, tsv_path):
+        self._data = numpy.array(
+            [line.split(" ") | pipe.select(lambda x: x == "1") | pipe.select(int) | pipe.as_list for line in
+             open(tsv_path)])
+
+    def __len__(self):
+        return len(self._data)
+
+    def get_example(self, i):
+        return self._data[i]
+
+
+class ZippedDataset(dataset_mixin.DatasetMixin):
+    def __init__(self, *bases):
+        self.bases = bases
+        target_len = len(self.bases[0])
+        if any([not len(base) == target_len for base in bases]):
+            raise Exception("Length of all datasets should be the same")
+
+    def __len__(self):
+        return len(self.bases[0])
+
+    def get_example(self, i):
+        return tuple(base[i] for base in self.bases)
 
 
 class PILImageDataset(dataset_mixin.DatasetMixin):
@@ -52,7 +80,6 @@ class PreprocessedDataset(dataset_mixin.DatasetMixin):
 
     def __len__(self):
         return len(self.base)
-
 
     def get_example(self, i) -> numpy.ndarray:
         raw = self.base[i]

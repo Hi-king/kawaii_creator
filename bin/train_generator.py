@@ -35,6 +35,8 @@ parser.add_argument("--batchsize", type=int, default=10)
 parser.add_argument("--use_accuracy_threshold", action="store_true")
 parser.add_argument("--use_vectorizer", action="store_true")
 parser.add_argument("--vectorizer_training_dataset")
+parser.add_argument("--classifier_training_image_dataset")
+parser.add_argument("--classifier_training_attribute_dataset")
 parser.add_argument("--outprefix", default="")
 parser.add_argument("--pretrained_generator")
 parser.add_argument("--pretrained_discriminator")
@@ -50,6 +52,8 @@ outdirname = "_".join([
                           "withvec" if args.use_vectorizer else "",
                           "disable_gen_train" if not args.generator_training else "",
                           "withvectrain" if args.vectorizer_training_dataset is not None else "",
+                          "withattributeclassifier" if args.classifier_training_attribute_dataset is not None else "",
+                          "withtrain" if args.vectorizer_training_dataset is not None else "",
                           str(int(time.time())),
                       ] | pipe.where(lambda x: len(x) > 0))
 
@@ -85,10 +89,24 @@ if args.vectorizer_training_dataset is not None:
     vectorizer_training_paths = glob.glob("{}/*".format(args.vectorizer_training_dataset))
     vectorizer_training_dataset = kawaii_creator.datasets.PreprocessedDataset(
         kawaii_creator.datasets.ResizedImageDataset(paths=vectorizer_training_paths, resize=(96, 96)))
-    # iterator = chainer.iterators.SerialIterator(dataset, batch_size=batchsize, repeat=True, shuffle=True)
     vectorizer_training_iterator = chainer.iterators.MultiprocessIterator(vectorizer_training_dataset,
                                                                           batch_size=batchsize, repeat=True,
                                                                           shuffle=True)
+
+if args.classifier_training_attribute_dataset is not None:
+    classifier_training_image_dataset = kawaii_creator.datasets.PreprocessedDataset(
+        kawaii_creator.datasets.ResizedImageDataset(paths=args.classifier_training_image_dataset, resize=(96, 96))
+    )
+    classifier_training_attribute_label_dataset = kawaii_creator.datasets.AttributeLabelDataset(
+        args.classifier_training_attribute_dataset)
+    classifier_training_attribute_dataset = kawaii_creator.datasets.ZippedDataset(
+        classifier_training_image_dataset,
+        classifier_training_attribute_label_dataset
+    )
+    classifier_attribute_training_iterator = chainer.iterators.MultiprocessIterator(
+        classifier_training_attribute_dataset,
+        batch_size=batchsize, repeat=True,
+        shuffle=True)
 
 generator = kawaii_creator.models.Generator(GENERATOR_INPUT_DIMENTIONS)
 if args.pretrained_generator is not None:
@@ -100,20 +118,30 @@ if args.use_vectorizer:
     vectorizer = kawaii_creator.models.Vectorizer()
 else:
     vectorizer = None
+if args.classifier_training_attribute_dataset is not None:
+    classifier = kawaii_creator.models.Vectorizer(outdim=40)
 if args.gpu >= 0:
     generator.to_gpu()
     discriminator.to_gpu()
     if args.use_vectorizer:
         vectorizer.to_gpu()
+    if args.classifier_training_attribute_dataset is not None:
+        classifier.to_gpu()
 
 updater = kawaii_creator.updaters.Updater(
     generator=generator, discriminator=discriminator, xp=xp, batchsize=batchsize,
     generator_input_dimentions=GENERATOR_INPUT_DIMENTIONS)
 if args.use_vectorizer:
     vectorizer_updater = kawaii_creator.updaters.VectorizerUpdater(vectorizer)
+if args.classifier_training_attribute_dataset is not None:
+    classifier_updater = kawaii_creator.updaters.ClassifierUpdater(classifier)
 
-count_processed, sum_loss_discriminator, sum_loss_generator, sum_accuracy = 0, 0, 0, 0
+count_processed, sum_loss_discriminator, sum_loss_generator, sum_accuracy, sum_loss_classifier, sum_accuracy_classifier = 0, 0, 0, 0, 0, 0
 for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
+    loss_generator = chainer.Variable(xp.zeros((), dtype=xp.float32))
+    loss_discriminator = chainer.Variable(xp.zeros((), dtype=xp.float32))
+    loss_vectorizer = chainer.Variable(xp.zeros((), dtype=xp.float32))
+    loss_classifier = chainer.Variable(xp.zeros((), dtype=xp.float32))
 
     if args.generator_training:
         # forward
@@ -123,13 +151,40 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
         accuracy = updater.discriminator_accuracy(discriminated_from_generated=discriminated_from_generated,
                                                   discriminated_from_dataset=discriminated_from_dataset)
         sum_accuracy += chainer.cuda.to_cpu(accuracy.data)  # update generator
-        sum_loss_generator += updater.update_generator(discriminated_from_generated=discriminated_from_generated)
+        loss_generator_each = updater.loss_generator(discriminated_from_generated=discriminated_from_generated)
+        loss_generator += loss_generator_each
+        sum_loss_generator += chainer.cuda.to_cpu(loss_generator_each.data)
 
         # update discriminator
         if (not args.use_accuracy_threshold) or accuracy.data < 0.8:
-            sum_loss_discriminator += updater.update_discriminator(
+            loss_discriminator_this = updater.loss_discriminator(
                 discriminated_from_generated=discriminated_from_generated,
                 discriminated_from_dataset=discriminated_from_dataset)
+            loss_discriminator += loss_discriminator_this
+            sum_loss_discriminator += chainer.cuda.to_cpu(loss_discriminator_this.data)
+
+        updater.optimizer_discriminator.zero_grads()
+        updater.optimizer_generator.zero_grads()
+        if args.classifier_training_attribute_dataset is not None:
+            classifier_updater.optimizer.zero_grads()
+            array_batch = next(classifier_attribute_training_iterator)
+            image_array = xp.array([each[0] for each in array_batch])
+            label_array = xp.array([each[1] for each in array_batch], dtype=xp.int32)
+            classified = classifier(generator(vectorizer(chainer.Variable(image_array))))
+            loss_classifier += chainer.functions.sigmoid_cross_entropy(
+                classified,
+                chainer.Variable(label_array)
+            )
+            sum_accuracy_classifier += ((chainer.functions.sigmoid(
+                classified).data > 0.5) == label_array).sum() / 40 / batchsize
+            sum_loss_classifier += chainer.cuda.to_cpu(loss_classifier.data)
+            loss_classifier.backward()
+            classifier_updater.optimizer.update()
+
+        loss_discriminator.backward()
+        loss_generator.backward()
+        updater.optimizer_discriminator.update()
+        updater.optimizer_generator.update()
 
     # update vectorizer
     if args.use_vectorizer:
@@ -140,7 +195,6 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
         vectorized = vectorizer(generated)
         vectorizer_updater.update_vectorizer(seed=random_seed, vectorized=vectorized)
 
-
     # finetune generator with vectorizer
     if args.vectorizer_training_dataset is not None:
         vectorizer_training_batch = chainer.Variable(xp.array(next(vectorizer_training_iterator)))
@@ -148,17 +202,19 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
             xp.clip(vectorizer(vectorizer_training_batch).data, -1, 1))
         generated_from_vectorized = generator(vectorized)
         discriminated_from_vectorizer_training = updater.discriminator(chainer.Variable(generated_from_vectorized.data))
-        updater.update_generator(discriminated_from_generated=discriminated_from_vectorizer_training)
+        updater.loss_generator(discriminated_from_generated=discriminated_from_vectorizer_training)
 
     report_span = batchsize * 100
-    save_span = batchsize * 10000
+    save_span = batchsize * 100
     count_processed += len(batch.data)
     if count_processed % report_span == 0:
         logging.info("processed: {}".format(count_processed))
         logging.info("accuracy_discriminator: {}".format(sum_accuracy * batchsize / report_span))
+        logging.info("accuracy_classifier: {}".format(sum_accuracy_classifier * batchsize / report_span))
+        logging.info("loss_classifier: {}".format(sum_loss_classifier / report_span))
         logging.info("loss_discriminator: {}".format(sum_loss_discriminator / report_span))
         logging.info("loss_generator: {}".format(sum_loss_generator / report_span))
-        sum_loss_discriminator, sum_loss_generator, sum_accuracy = 0, 0, 0
+        sum_loss_discriminator, sum_loss_generator, sum_accuracy, sum_loss_classifier, sum_accuracy_classifier = 0, 0, 0, 0, 0
     if count_processed % save_span == 0:
         chainer.serializers.save_npz(
             os.path.join(OUTPUT_DIRECTORY, "discriminator_model_{}.npz".format(count_processed)), discriminator)
@@ -167,3 +223,6 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
         if args.use_vectorizer:
             chainer.serializers.save_npz(
                 os.path.join(OUTPUT_DIRECTORY, "vectorizer_model_{}.npz".format(count_processed)), vectorizer)
+        if args.classifier_training_attribute_dataset is not None:
+            chainer.serializers.save_npz(
+                os.path.join(OUTPUT_DIRECTORY, "classifier_model_{}.npz".format(count_processed)), classifier)

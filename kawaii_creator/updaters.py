@@ -34,18 +34,18 @@ class Updater(object):
             chainer.Variable(self.xp.zeros(discriminated_from_dataset.data.shape[0], dtype=self.xp.int32))
         )) / 2
 
-    def update_generator(self, discriminated_from_generated):
-        self.optimizer_generator.zero_grads()
+    def loss_generator(self, discriminated_from_generated):
+        # self.optimizer_generator.zero_grads()
         loss_generator = chainer.functions.softmax_cross_entropy(
             discriminated_from_generated,
             chainer.Variable(self.xp.zeros(discriminated_from_generated.data.shape[0], dtype=self.xp.int32))
         )
-        loss_generator.backward()
-        self.optimizer_generator.update()
-        return chainer.cuda.to_cpu(loss_generator.data)
+        # loss_generator.backward()
+        # self.optimizer_generator.update()
+        return loss_generator
 
-    def update_discriminator(self, discriminated_from_generated, discriminated_from_dataset):
-        self.optimizer_discriminator.zero_grads()
+    def loss_discriminator(self, discriminated_from_generated, discriminated_from_dataset):
+        # self.optimizer_discriminator.zero_grads()
         loss_discriminator = chainer.functions.softmax_cross_entropy(
             discriminated_from_generated,
             chainer.Variable(self.xp.ones(discriminated_from_generated.data.shape[0], dtype=self.xp.int32))
@@ -53,9 +53,8 @@ class Updater(object):
             discriminated_from_dataset,
             chainer.Variable(self.xp.zeros(discriminated_from_dataset.data.shape[0], dtype=self.xp.int32))
         )
-        loss_discriminator.backward()
-        self.optimizer_discriminator.update()
-        return chainer.cuda.to_cpu(loss_discriminator.data)
+        # self.optimizer_discriminator.update()
+        return loss_discriminator
 
 
 class VectorizerUpdater(object):
@@ -73,3 +72,10 @@ class VectorizerUpdater(object):
         )
         loss.backward()
         self.optimizer.update()
+
+class ClassifierUpdater(object):
+    def __init__(self, classifier):
+        self.classifier = classifier
+        self.optimizer = chainer.optimizers.Adam()
+        self.optimizer.setup(self.classifier)
+        self.optimizer.add_hook(chainer.optimizer.WeightDecay(10 ** -5))

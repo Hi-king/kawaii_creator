@@ -27,7 +27,7 @@ class Generator(chainer.Chain):
         h = chainer.functions.relu(self.bn1(self.dc1(h), test=test))
         h = chainer.functions.relu(self.bn2(self.dc2(h), test=test))
         h = chainer.functions.relu(self.bn3(self.dc3(h), test=test))
-        x = (self.dc4(h))
+        x = self.dc4(h)
         return x
 
 
@@ -55,13 +55,13 @@ class Discriminator(chainer.Chain):
 
 
 class Vectorizer(chainer.Chain):
-    def __init__(self):
+    def __init__(self, outdim=100):
         super(Vectorizer, self).__init__(
             c0=chainer.functions.Convolution2D(3, 64, 4, stride=2, pad=1, wscale=0.02 * math.sqrt(4 * 4 * 3)),
             c1=chainer.functions.Convolution2D(64, 128, 4, stride=2, pad=1, wscale=0.02 * math.sqrt(4 * 4 * 64)),
             c2=chainer.functions.Convolution2D(128, 256, 4, stride=2, pad=1, wscale=0.02 * math.sqrt(4 * 4 * 128)),
             c3=chainer.functions.Convolution2D(256, 512, 4, stride=2, pad=1, wscale=0.02 * math.sqrt(4 * 4 * 256)),
-            l0z=chainer.functions.Linear(6 * 6 * 512, 100, wscale=0.02 * math.sqrt(6 * 6 * 512)),
+            l0z=chainer.functions.Linear(6 * 6 * 512, outdim, wscale=0.02 * math.sqrt(6 * 6 * 512)),
             bn0=chainer.functions.BatchNormalization(64),
             bn1=chainer.functions.BatchNormalization(128),
             bn2=chainer.functions.BatchNormalization(256),
