@@ -27,7 +27,7 @@ class Generator(chainer.Chain):
         h = chainer.functions.relu(self.bn1(self.dc1(h), test=test))
         h = chainer.functions.relu(self.bn2(self.dc2(h), test=test))
         h = chainer.functions.relu(self.bn3(self.dc3(h), test=test))
-        x = self.dc4(h)
+        x = (self.dc4(h))
         return x
 
 
@@ -89,24 +89,29 @@ class FaceExtractor(object):
 
     def extract(self, img_file):
         target_img = cv2.imread(img_file)
+        print(target_img.shape)
+        if target_img.shape[2] == 4:
+            target_img = target_img[:, :, :3]
         gray_img = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
-        gray_img_preprocessed = cv2.equalizeHist(gray_img)
+        # gray_img_preprocessed = cv2.equalizeHist(gray_img)
         faces = self.classifier.detectMultiScale(
-            gray_img_preprocessed,
+            gray_img,
             scaleFactor=1.1,
             minNeighbors=5,
-            minSize=(24, 24))
+            # minSize=(24, 24))
+            minSize = (64, 64))
         print(len(faces))
         if len(faces) == 0:
             raise (Exception("Could not find face from img"))
 
         x, y, width, height = faces[0]
-        image_width, image_height, _ = target_img.shape
+        image_height, image_width, _ = target_img.shape
         margin = min(
-            y, image_height - y - width,
+            y, image_height - y - height,
             x, image_width - x - width,
-               width * self.margin
+               int(width * self.margin)
         )
+        print(margin)
         rgb_img = cv2.cvtColor(cv2.resize(
             target_img[y - margin:y + height + margin, x - margin:x + width + margin],
             (96, 96),

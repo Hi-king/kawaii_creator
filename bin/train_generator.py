@@ -38,8 +38,10 @@ parser.add_argument("--vectorizer_training_dataset")
 parser.add_argument("--classifier_training_image_dataset")
 parser.add_argument("--classifier_training_attribute_dataset")
 parser.add_argument("--outprefix", default="")
+parser.add_argument("--classifier_loss_weight", default=1.0, type=float)
 parser.add_argument("--pretrained_generator")
 parser.add_argument("--pretrained_discriminator")
+parser.add_argument("--pretrained_vectorizer")
 parser.add_argument('--disable_generator_training', action='store_false', dest='generator_training')
 args = parser.parse_args()
 
@@ -51,6 +53,7 @@ outdirname = "_".join([
                           "accthresh" if args.use_accuracy_threshold else "",
                           "withvec" if args.use_vectorizer else "",
                           "disable_gen_train" if not args.generator_training else "",
+                          "finetunevectorizer" if args.pretrained_vectorizer is not None else "",
                           "withvectrain" if args.vectorizer_training_dataset is not None else "",
                           "withattributeclassifier" if args.classifier_training_attribute_dataset is not None else "",
                           "withtrain" if args.vectorizer_training_dataset is not None else "",
@@ -69,6 +72,8 @@ if args.pretrained_generator is not None:
     logging.info("pretrained_generator: {}".format(os.path.abspath(args.pretrained_generator)))
 if args.pretrained_discriminator is not None:
     logging.info("pretrained_discriminator: {}".format(os.path.abspath(args.pretrained_discriminator)))
+if args.pretrained_vectorizer is not None:
+    logging.info("pretrained_vectorizer: {}".format(os.path.abspath(args.pretrained_vectorizer)))
 
 if args.gpu >= 0:
     chainer.cuda.check_cuda_available()
@@ -118,6 +123,8 @@ if args.use_vectorizer:
     vectorizer = kawaii_creator.models.Vectorizer()
 else:
     vectorizer = None
+if args.pretrained_vectorizer is not None:
+    kawaii_creator.utility.load_modelfile(args.pretrained_vectorizer, vectorizer)
 if args.classifier_training_attribute_dataset is not None:
     classifier = kawaii_creator.models.Vectorizer(outdim=40)
 if args.gpu >= 0:
@@ -160,11 +167,18 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
             loss_discriminator_this = updater.loss_discriminator(
                 discriminated_from_generated=discriminated_from_generated,
                 discriminated_from_dataset=discriminated_from_dataset)
-            loss_discriminator += loss_discriminator_this
+            loss_discriminator += loss_discriminator_this * args.classifier_loss_weight
             sum_loss_discriminator += chainer.cuda.to_cpu(loss_discriminator_this.data)
 
-        updater.optimizer_discriminator.zero_grads()
         updater.optimizer_generator.zero_grads()
+        loss_generator.backward()
+
+        updater.optimizer_discriminator.zero_grads()
+
+
+
+        loss_discriminator.backward()
+
         if args.classifier_training_attribute_dataset is not None:
             classifier_updater.optimizer.zero_grads()
             array_batch = next(classifier_attribute_training_iterator)
@@ -181,8 +195,6 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
             loss_classifier.backward()
             classifier_updater.optimizer.update()
 
-        loss_discriminator.backward()
-        loss_generator.backward()
         updater.optimizer_discriminator.update()
         updater.optimizer_generator.update()
 
@@ -204,7 +216,7 @@ for batch in iterator | pipe.select(xp.array) | pipe.select(chainer.Variable):
         discriminated_from_vectorizer_training = updater.discriminator(chainer.Variable(generated_from_vectorized.data))
         updater.loss_generator(discriminated_from_generated=discriminated_from_vectorizer_training)
 
-    report_span = batchsize * 100
+    report_span = batchsize * 10
     save_span = batchsize * 100
     count_processed += len(batch.data)
     if count_processed % report_span == 0:

@@ -9,6 +9,7 @@ import numpy
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from kawaii_creator import models
+import kawaii_creator
 
 parser = argparse.ArgumentParser()
 parser.add_argument("generator_model_file")
@@ -18,13 +19,12 @@ args = parser.parse_args()
 xp = numpy
 
 generator = models.Generator()
-chainer.serializers.load_hdf5(args.generator_model_file, generator)
+kawaii_creator.utility.load_modelfile(args.generator_model_file, generator)
 
 extractor = models.FaceExtractor()
 
 vectorizer = models.Vectorizer()
-chainer.serializers.load_hdf5(args.vectorizer_model_file, vectorizer)
-
+kawaii_creator.utility.load_modelfile(args.vectorizer_model_file, vectorizer)
 
 
 def clip_img(x):
@@ -65,6 +65,7 @@ margin_ratio = 0.3
 
 for i in range(10000):
     ret, frame = cap.read()
+    print(frame.shape)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # facerect = classifier.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=1, minSize=(1, 1))
     facerect = classifier.detectMultiScale(
